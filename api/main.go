@@ -2,9 +2,15 @@ package zapgpt
 
 import (
 	"bytes"
+	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"io/ioutil"
 	"net/http"
+	"net/url"
+
+	"github.com/aws/aws-lambda-go/events"
+	"github.com/aws/aws-lambda-go/lambda"
 )
 
 type Message struct {
@@ -74,4 +80,49 @@ func GenerateGPTText(query string) (string, error) {
 	}
 
 	return resp.Choices[0].Message.Content, nil
+}
+
+func ParseBase64RequestData(s string) (string, error) {
+	dataBytes, err := base64.StdEncoding.DecodeString(s)
+	if err != nil {
+		return "", err
+	}
+
+	data, err := url.ParseQuery(string(dataBytes))
+	if err != nil {
+		return "", err
+	}
+
+	if data.Has("Body") {
+		return data.Get("Body"), nil
+	}
+
+	return "", errors.New("Body not found!")
+}
+
+func Process(request events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
+	result, err := ParseBase64RequestData(request.Body)
+	if err != nil {
+		return events.APIGatewayProxyResponse{
+			StatusCode: http.StatusInternalServerError,
+			Body:       err.Error(),
+		}, nil
+	}
+
+	text, err := GenerateGPTText(result)
+	if err != nil {
+		return events.APIGatewayProxyResponse{
+			StatusCode: http.StatusInternalServerError,
+			Body:       err.Error(),
+		}, nil
+	}
+
+	return events.APIGatewayProxyResponse{
+		StatusCode: http.StatusOK,
+		Body:       text,
+	}, nil
+}
+
+func main() {
+	lambda.Start(Process)
 }
