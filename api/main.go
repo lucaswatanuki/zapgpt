@@ -1,13 +1,13 @@
-package zapgpt
+package main
 
 import (
 	"bytes"
-	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"io/ioutil"
 	"net/http"
 	"net/url"
+	"os"
 
 	"github.com/aws/aws-lambda-go/events"
 	"github.com/aws/aws-lambda-go/lambda"
@@ -46,7 +46,7 @@ func GenerateGPTText(query string) (string, error) {
 				Content: query,
 			},
 		},
-		MaxTokens: 150, // TODO env var
+		MaxTokens: 150,
 	}
 
 	reqJson, err := json.Marshal(req)
@@ -58,8 +58,9 @@ func GenerateGPTText(query string) (string, error) {
 	if err != nil {
 		return "", err
 	}
+
 	request.Header.Set("Content-Type", "application/json")
-	request.Header.Set("Authorization", "Bearer token") //TODO set up token
+	request.Header.Set("Authorization", "Bearer " + os.Getenv("API_KEY"))
 
 	response, err := http.DefaultClient.Do(request)
 	if err != nil {
@@ -83,12 +84,7 @@ func GenerateGPTText(query string) (string, error) {
 }
 
 func ParseBase64RequestData(s string) (string, error) {
-	dataBytes, err := base64.StdEncoding.DecodeString(s)
-	if err != nil {
-		return "", err
-	}
-
-	data, err := url.ParseQuery(string(dataBytes))
+	data, err := url.ParseQuery(string(s))
 	if err != nil {
 		return "", err
 	}
@@ -97,7 +93,7 @@ func ParseBase64RequestData(s string) (string, error) {
 		return data.Get("Body"), nil
 	}
 
-	return "", errors.New("Body not found!")
+	return "", errors.New("body not found")
 }
 
 func Process(request events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
