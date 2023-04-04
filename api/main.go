@@ -49,7 +49,7 @@ func GenerateGPTText(query string) (string, error) {
 				Content: query,
 			},
 		},
-		MaxTokens: 150,
+		MaxTokens: 1000,
 	}
 
 	reqJson, err := json.Marshal(req)
@@ -59,6 +59,7 @@ func GenerateGPTText(query string) (string, error) {
 
 	request, err := http.NewRequest("POST", "https://api.openai.com/v1/chat/completions", bytes.NewBuffer(reqJson))
 	if err != nil {
+		fmt.Println(err.Error())
 		return "", err
 	}
 
@@ -67,6 +68,7 @@ func GenerateGPTText(query string) (string, error) {
 
 	response, err := http.DefaultClient.Do(request)
 	if err != nil {
+		fmt.Println(err.Error())
 		return "", err
 	}
 
@@ -74,6 +76,7 @@ func GenerateGPTText(query string) (string, error) {
 
 	responseBody, err := ioutil.ReadAll(response.Body)
 	if err != nil {
+		fmt.Println(err.Error())
 		return "", err
 	}
 
@@ -86,21 +89,21 @@ func GenerateGPTText(query string) (string, error) {
 	return resp.Choices[0].Message.Content, nil
 }
 
-func ParseBase64RequestData(s string) (string, error) {
+func ParseRequestData(s string) (string, string, error) {
 	data, err := url.ParseQuery(string(s))
 	if err != nil {
-		return "", err
+		return "", "", err
 	}
 
-	if data.Has("Body") {
-		return data.Get("Body"), nil
+	if data.Has("Body") && data.Has("From") {
+		return data.Get("Body"), data.Get("From"), nil
 	}
 
-	return "", errors.New("body not found")
+	return "", "", errors.New("body not found")
 }
 
 func Process(request events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
-	result, err := ParseBase64RequestData(request.Body)
+	body, phoneNumber, err := ParseRequestData(request.Body)
 	if err != nil {
 		return events.APIGatewayProxyResponse{
 			StatusCode: http.StatusInternalServerError,
@@ -108,7 +111,7 @@ func Process(request events.APIGatewayProxyRequest) (events.APIGatewayProxyRespo
 		}, nil
 	}
 
-	text, err := GenerateGPTText(result)
+	text, err := GenerateGPTText(body)
 	if err != nil {
 		return events.APIGatewayProxyResponse{
 			StatusCode: http.StatusInternalServerError,
@@ -116,7 +119,7 @@ func Process(request events.APIGatewayProxyRequest) (events.APIGatewayProxyRespo
 		}, nil
 	}
 
-	SendMessage(text)
+	SendMessage(text, phoneNumber)
 
 	return events.APIGatewayProxyResponse{
 		StatusCode: http.StatusOK,
@@ -124,11 +127,10 @@ func Process(request events.APIGatewayProxyRequest) (events.APIGatewayProxyRespo
 	}, nil
 }
 
-func SendMessage(body string) {
+func SendMessage(body string, phoneNumber string) {
 	accountSid := os.Getenv("TWILIO_ACCOUNT_SID")
 	apiSecret := os.Getenv("TWILIO_API_SECRET")
 	from := os.Getenv("TWILIO_FROM_PHONE_NUMBER")
-	to := os.Getenv("PHONE_NUMBER")
 
 	client := twilio.NewRestClientWithParams(twilio.ClientParams{
 		Username:   accountSid,
@@ -137,7 +139,7 @@ func SendMessage(body string) {
 	})
 
 	params := &twilioApi.CreateMessageParams{}
-	params.SetTo(to)
+	params.SetTo(phoneNumber)
 	params.SetFrom(from)
 	params.SetBody(body)
 
