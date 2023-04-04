@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io/ioutil"
 	"net/http"
 	"net/url"
@@ -11,6 +12,8 @@ import (
 
 	"github.com/aws/aws-lambda-go/events"
 	"github.com/aws/aws-lambda-go/lambda"
+	"github.com/twilio/twilio-go"
+	twilioApi "github.com/twilio/twilio-go/rest/api/v2010"
 )
 
 type Message struct {
@@ -60,7 +63,7 @@ func GenerateGPTText(query string) (string, error) {
 	}
 
 	request.Header.Set("Content-Type", "application/json")
-	request.Header.Set("Authorization", "Bearer " + os.Getenv("API_KEY"))
+	request.Header.Set("Authorization", "Bearer "+os.Getenv("API_KEY"))
 
 	response, err := http.DefaultClient.Do(request)
 	if err != nil {
@@ -113,10 +116,38 @@ func Process(request events.APIGatewayProxyRequest) (events.APIGatewayProxyRespo
 		}, nil
 	}
 
+	SendMessage(text)
+
 	return events.APIGatewayProxyResponse{
 		StatusCode: http.StatusOK,
 		Body:       text,
 	}, nil
+}
+
+func SendMessage(body string) {
+	accountSid := os.Getenv("TWILIO_ACCOUNT_SID")
+	apiSecret := os.Getenv("TWILIO_API_SECRET")
+	from := os.Getenv("TWILIO_FROM_PHONE_NUMBER")
+	to := os.Getenv("PHONE_NUMBER")
+
+	client := twilio.NewRestClientWithParams(twilio.ClientParams{
+		Username:   accountSid,
+		Password:   apiSecret,
+		AccountSid: accountSid,
+	})
+
+	params := &twilioApi.CreateMessageParams{}
+	params.SetTo(to)
+	params.SetFrom(from)
+	params.SetBody(body)
+
+	resp, err := client.Api.CreateMessage(params)
+	if err != nil {
+		fmt.Println(err.Error())
+	} else {
+		response, _ := json.Marshal(*resp)
+		fmt.Println("Response: " + string(response))
+	}
 }
 
 func main() {
