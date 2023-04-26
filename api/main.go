@@ -12,9 +12,12 @@ import (
 
 	"github.com/aws/aws-lambda-go/events"
 	"github.com/aws/aws-lambda-go/lambda"
+	"github.com/sirupsen/logrus"
 	"github.com/twilio/twilio-go"
 	twilioApi "github.com/twilio/twilio-go/rest/api/v2010"
 )
+
+var log = logrus.New()
 
 type Message struct {
 	Role    string `json:"role"`
@@ -57,6 +60,7 @@ func GenerateGPTText(query string) (string, error) {
 		return "", err
 	}
 
+	log.Info("Requesting OpenAI...")
 	request, err := http.NewRequest("POST", "https://api.openai.com/v1/chat/completions", bytes.NewBuffer(reqJson))
 	if err != nil {
 		fmt.Println(err.Error())
@@ -76,15 +80,18 @@ func GenerateGPTText(query string) (string, error) {
 
 	responseBody, err := ioutil.ReadAll(response.Body)
 	if err != nil {
-		fmt.Println(err.Error())
+		log.Error(err.Error())
 		return "", err
 	}
 
 	var resp Response
 	err = json.Unmarshal(responseBody, &resp)
 	if err != nil {
+		log.Error(err.Error())
 		return "", err
 	}
+
+	log.Infof("Response from OpenAI: [%s]", resp.Choices[0].Message.Content)
 
 	return resp.Choices[0].Message.Content, nil
 }
@@ -119,6 +126,7 @@ func Process(request events.APIGatewayProxyRequest) (events.APIGatewayProxyRespo
 		}, nil
 	}
 
+	log.Info("Sending message back to number")
 	SendMessage(text, phoneNumber)
 
 	return events.APIGatewayProxyResponse{
@@ -145,7 +153,7 @@ func SendMessage(body string, phoneNumber string) {
 
 	resp, err := client.Api.CreateMessage(params)
 	if err != nil {
-		fmt.Println(err.Error())
+		log.Error(err.Error())
 	} else {
 		response, _ := json.Marshal(*resp)
 		fmt.Println("Response: " + string(response))
