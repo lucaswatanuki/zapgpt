@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"net/url"
 	"os"
@@ -60,7 +60,6 @@ func GenerateGPTText(query string) (string, error) {
 		return "", err
 	}
 
-	log.Info("Requesting OpenAI...")
 	request, err := http.NewRequest("POST", "https://api.openai.com/v1/chat/completions", bytes.NewBuffer(reqJson))
 	if err != nil {
 		fmt.Println(err.Error())
@@ -78,7 +77,7 @@ func GenerateGPTText(query string) (string, error) {
 
 	defer response.Body.Close()
 
-	responseBody, err := ioutil.ReadAll(response.Body)
+	responseBody, err := io.ReadAll(response.Body)
 	if err != nil {
 		log.Error(err.Error())
 		return "", err
@@ -90,8 +89,6 @@ func GenerateGPTText(query string) (string, error) {
 		log.Error(err.Error())
 		return "", err
 	}
-
-	log.Infof("Response from OpenAI: [%s]", resp.Choices[0].Message.Content)
 
 	return resp.Choices[0].Message.Content, nil
 }
